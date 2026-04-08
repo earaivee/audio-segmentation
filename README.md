@@ -44,8 +44,8 @@
 | 片段 1 (4秒) | [文件大小] | [⬇️ 下载](https://github.com/sjsherry2025/audio-segmentation/raw/master/src/assets/【清软喵】这么好的妹妹去哪里找呀_seg_0001.wav) |
 | 片段 2 (5秒) | [文件大小] | [⬇️ 下载](https://github.com/sjsherry2025/audio-segmentation/raw/master/src/assets/【清软喵】这么好的妹妹去哪里找呀_seg_0002.wav) |
 | 片段 3 (4秒) | [文件大小] | [⬇️ 下载](https://github.com/sjsherry2025/audio-segmentation/raw/master/src/assets/【清软喵】这么好的妹妹去哪里找呀_seg_0003.wav) |
-| 片段 2 (6秒) | [文件大小] | [⬇️ 下载](https://github.com/sjsherry2025/audio-segmentation/raw/master/src/assets/【清软喵】这么好的妹妹去哪里找呀_seg_0002.wav) |
-| 片段 3 (3秒) | [文件大小] | [⬇️ 下载](https://github.com/sjsherry2025/audio-segmentation/raw/master/src/assets/【清软喵】这么好的妹妹去哪里找呀_seg_0003.wav) |
+| 片段 4 (6秒) | [文件大小] | [⬇️ 下载](https://github.com/sjsherry2025/audio-segmentation/raw/master/src/assets/【清软喵】这么好的妹妹去哪里找呀_seg_0002.wav) |
+| 片段 5 (3秒) | [文件大小] | [⬇️ 下载](https://github.com/sjsherry2025/audio-segmentation/raw/master/src/assets/【清软喵】这么好的妹妹去哪里找呀_seg_0003.wav) |
 
 > 💡 点击“下载”即可保存音频文件到本地播放
 
