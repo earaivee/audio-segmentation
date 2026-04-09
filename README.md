@@ -31,9 +31,23 @@
 
 ## 🖼️ 界面预览
 
-<div align="center">
+<!-- <div align="center">
   <img width="100%" alt="image" src="https://github.com/user-attachments/assets/f42c7e5c-50fa-4dfa-a5aa-68435296e649" />
-</div>
+</div> -->
+
+## 🎵 音频切割效果试听
+
+以下音频均通过本工具切割生成，时长控制在 3-10 秒内，音量已统一归一化。
+
+| 切割后片段 | 文件大小 | 操作 |
+| :--- | :--- | :--- |
+| 片段 1 (4秒) | [文件大小] | [⬇️ 下载](https://github.com/sjsherry2025/audio-segmentation/raw/master/src/assets/【清软喵】这么好的妹妹去哪里找呀_seg_0001.wav) |
+| 片段 2 (5秒) | [文件大小] | [⬇️ 下载](https://github.com/sjsherry2025/audio-segmentation/raw/master/src/assets/【清软喵】这么好的妹妹去哪里找呀_seg_0002.wav) |
+| 片段 3 (4秒) | [文件大小] | [⬇️ 下载](https://github.com/sjsherry2025/audio-segmentation/raw/master/src/assets/【清软喵】这么好的妹妹去哪里找呀_seg_0003.wav) |
+| 片段 4 (6秒) | [文件大小] | [⬇️ 下载](https://github.com/sjsherry2025/audio-segmentation/raw/master/src/assets/【清软喵】这么好的妹妹去哪里找呀_seg_0002.wav) |
+| 片段 5 (3秒) | [文件大小] | [⬇️ 下载](https://github.com/sjsherry2025/audio-segmentation/raw/master/src/assets/【清软喵】这么好的妹妹去哪里找呀_seg_0003.wav) |
+
+> 💡 点击“下载”即可保存音频文件到本地播放
 
 ---
 
