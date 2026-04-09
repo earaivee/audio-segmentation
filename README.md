@@ -4,7 +4,7 @@
 
 ## 基于 Silero VAD 的语音活动检测与智能分割
 
-[![Python](https://img.shields.io/badge/Python-3.8+-blue.svg)](https://www.python.org/)
+[![Python](https://img.shields.io/badge/Python-3.10+-blue.svg)](https://www.python.org/)
 [![PyTorch](https://img.shields.io/badge/PyTorch-1.12+-red.svg)](https://pytorch.org/)
 [![License](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
 [![PRs Welcome](https://img.shields.io/badge/PRs-welcome-brightgreen.svg)](CONTRIBUTING.md)
@@ -26,6 +26,7 @@
 - 📝 **语句完整性**：优先在静音间隙切割，保证语句语义完整
 - 📁 **批量处理**：支持单/多文件/多层级下的文件批量处理
 - 🔊 **音量统一归一化**：内置RMS/峰值归一化，确保输出音频响度一致
+- 🎤 **高精度语音识别**：集成fast-whisper 引擎，增加音频转文字能力。
 
 ---
 
