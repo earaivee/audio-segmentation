@@ -10,7 +10,7 @@ router = APIRouter()
 
 @router.websocket("/ws/logs")
 async def websocket_logs(websocket: WebSocket):
-    """“WebSocket 端点 - 实时推送日志和进度"""
+    # WebSocket 端点 - 实时推送日志和进度
     await websocket.accept()
     ws_log_handler.connections.add(websocket)
 

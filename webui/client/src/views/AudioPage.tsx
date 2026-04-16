@@ -180,6 +180,24 @@ export default defineComponent({
             }
         }
 
+        const deleteSourceFile = async (filepath: string, filename: string) => {
+            try {
+                // 停止播放
+                if (playingSource.value === filepath) {
+                    if (currentSourceAudio.value) {
+                        currentSourceAudio.value.pause()
+                        currentSourceAudio.value = null
+                    }
+                    playingSource.value = ''
+                }
+                await audioApi.removeSource(filepath)
+                message.success(`已删除: ${filename}`)
+                await loadSources() // 刷新列表
+            } catch (e: any) {
+                message.error(e.response?.data?.detail || '删除失败')
+            }
+        }
+
         // --- 导入源音频 ---
         const importInputRef = ref<HTMLInputElement | null>(null)
         const triggerImport = () => {
@@ -674,6 +692,20 @@ export default defineComponent({
                                                                  onClick={() => playSource(sf.filepath)}>
                                                             {{ icon: () => <NIcon size={16}>{isPlaying ? <StopCircleOutline /> : <PlayCircleOutline />}</NIcon> }}
                                                         </NButton>
+                                                         <NPopconfirm 
+                                                            onPositiveClick={() => deleteSourceFile(sf.filepath, sf.filename)}
+                                                            positiveText="删除" 
+                                                            negativeText="取消"
+                                                        >
+                                                            {{
+                                                                trigger: () => (
+                                                                    <NButton size="tiny" circle type="error" quaternary>
+                                                                        {{ icon: () => <NIcon size={16}><TrashOutline /></NIcon> }}
+                                                                    </NButton>
+                                                                ),
+                                                                default: () => `确定删除源文件 "${sf.filename}"？`,
+                                                            }}
+                                                        </NPopconfirm>
                                                     </div>
                                                 )
                                             })}

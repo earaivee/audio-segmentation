@@ -24,11 +24,11 @@ logger = setup_logger(__name__)
 
 
 def create_app() -> FastAPI:
-    """创建并配置 FastAPI 应用"""
+    # 创建并配置 FastAPI 应用
     app = FastAPI(
         title="音频智能切分工具",
         description="基于 Silero VAD 的音频智能切分与 ASR 识别系统",
-        version="1.0.0"
+        version="1.1.0"
     )
     
     # 导入路由
@@ -37,7 +37,7 @@ def create_app() -> FastAPI:
     # 添加 CORS 中间件
     app.add_middleware(
         CORSMiddleware,
-        allow_origins=["*"],  # 在生产环境中应该指定具体的域名
+        allow_origins=["*"],
         allow_credentials=True,
         allow_methods=["*"],
         allow_headers=["*"],
@@ -49,7 +49,7 @@ def create_app() -> FastAPI:
     app.include_router(task_router.router, prefix="/api/task", tags=["任务管理"])
     app.include_router(ws_router.router, tags=["WebSocket"])
     
-    # 静态文件服务（前端构建产物）
+    # 静态文件服务
     client_dist = _Path(__file__).parent.parent / "webui" / "client" / "dist"
     if client_dist.exists():
         app.mount("/", StaticFiles(directory=str(client_dist), html=True), name="static")

@@ -19,7 +19,6 @@ from src.config.errors import FileError, AudioError
 
 
 class WebSocketLogHandler(logging.Handler):
-    """自定义 logging Handler，将日志推送到 WebSocket 连接并缓存到 TaskService"""
 
     def __init__(self):
         super().__init__()
@@ -55,8 +54,7 @@ ws_log_handler.setFormatter(logging.Formatter('%(asctime)s - %(levelname)s - %(m
 
 
 class TaskService:
-    """任务执行服务"""
-
+    
     def __init__(self):
         self.status = "idle"  # idle, running, completed, error
         self.progress = 0.0

@@ -1,9 +1,8 @@
 # webui/server/routers/audio_router.py
-"""音频文件管理 API"""
 
 import shutil
 from pathlib import Path
-from fastapi import APIRouter, HTTPException, UploadFile, File, Form
+from fastapi import APIRouter, HTTPException, UploadFile, File, Form, Query
 from fastapi.responses import FileResponse
 from typing import List, Optional
 from webui.server.models import (
@@ -24,7 +23,7 @@ router = APIRouter()
 
 @router.get("/list")
 async def get_audio_list():
-    """获取输出目录的音频文件列表（平铺）"""
+    # 获取输出目录的音频文件列表（平铺）
     config = get_config()
     files = list_audio_files(config.output_dir, config.supported_formats)
     return {"files": files, "total": len(files)}
@@ -32,7 +31,7 @@ async def get_audio_list():
 
 @router.get("/tree")
 async def get_audio_tree():
-    """获取输出目录的音频文件树形结构（按文件夹分组）"""
+    # 获取输出目录的音频文件树形结构（按文件夹分组）
     config = get_config()
     tree = list_audio_tree(config.output_dir, config.supported_formats)
     total_files = sum(item["children_count"] for item in tree)
@@ -41,7 +40,7 @@ async def get_audio_tree():
 
 @router.get("/play")
 async def play_audio(path: str):
-    """音频文件流式播放"""
+    # 音频文件流式播放
     file_path = Path(path)
     if not file_path.exists():
         raise HTTPException(status_code=404, detail="文件不存在")
@@ -52,26 +51,30 @@ async def play_audio(path: str):
     )
 
 
-@router.delete("/{filename}")
-async def remove_audio(filename: str, dir: str = ""):
-    """删除单个音频片段"""
+@router.delete("/remove-source")
+async def remove_source_file(filepath: str):
+    """删除源音频文件"""
     config = get_config()
-    if dir:
-        filepath = config.output_dir / dir / filename
-    else:
-        # 搜索文件
-        found = list(config.output_dir.glob(f"**/{filename}"))
-        if not found:
-            raise HTTPException(status_code=404, detail="文件不存在")
-        filepath = found[0]
-
-    delete_audio_file(str(filepath), output_dir=config.output_dir)
-    return {"message": f"已删除: {filename}"}
+    source_path = Path(filepath)
+    # 安全检查
+    try:
+        source_path.resolve().relative_to(config.input_dir.resolve())
+    except ValueError:
+        raise HTTPException(status_code=403, detail="不能删除输入目录外的文件")
+    
+    if not source_path.exists():
+        raise HTTPException(status_code=404, detail="文件不存在")
+    
+    try:
+        source_path.unlink()
+        return {"message": f"已删除源文件: {source_path.name}"}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"删除失败: {e}")
 
 
 @router.post("/merge")
 async def merge_audio(req: MergeRequest):
-    """合并多个音频片段，自动命名保存在源文件所在目录"""
+    # 合并多个音频片段，自动命名保存在源文件所在目录
     if len(req.filepaths) < 2:
         raise HTTPException(status_code=400, detail="至少需要两个文件才能合并")
 
@@ -91,7 +94,7 @@ async def merge_audio(req: MergeRequest):
 
 @router.post("/split")
 async def split_audio(req: SplitRequest):
-    """手动切分单个音频"""
+    # 手动切分单个音频
     if not Path(req.filepath).exists():
         raise HTTPException(status_code=404, detail="文件不存在")
 
@@ -105,7 +108,7 @@ async def split_audio(req: SplitRequest):
 
 @router.post("/transcribe")
 async def transcribe_audio_single(req: TranscribeRequest):
-    """对单个音频进行 ASR 识别"""
+    # 对单个音频进行 ASR 识别
     if not Path(req.filepath).exists():
         raise HTTPException(status_code=404, detail="文件不存在")
 
@@ -119,7 +122,7 @@ async def transcribe_audio_single(req: TranscribeRequest):
 
 @router.put("/text")
 async def update_text(req: UpdateTextRequest):
-    """修改识别文本"""
+    # 修改识别文本
     config = get_config()
     try:
         update_audio_text(req.filepath, req.text, output_dir=config.output_dir)
@@ -130,7 +133,7 @@ async def update_text(req: UpdateTextRequest):
 
 @router.post("/export-list")
 async def export_list(req: ExportListRequest):
-    """重新生成 GPT-SoVITS 训练列表"""
+    # 重新生成 GPT-SoVITS 训练列表
     config = get_config()
 
     if req.items:
@@ -149,7 +152,7 @@ async def export_list(req: ExportListRequest):
 
 @router.get("/output-list")
 async def get_output_list():
-    """获取 output.list 推理文本文件内容"""
+    # 获取 output.list 推理文本文件内容
     config = get_config()
     list_path = config.sovits.output_path
 
@@ -165,7 +168,7 @@ async def get_output_list():
 
 @router.put("/rename")
 async def rename_audio(req: RenameRequest):
-    """重命名音频文件"""
+    # 重命名音频文件
     try:
         new_path = rename_audio_file(req.filepath, req.new_name)
         return {"message": "重命名成功", "new_path": new_path}
@@ -179,7 +182,7 @@ async def rename_audio(req: RenameRequest):
 
 @router.put("/move")
 async def move_audio(req: MoveRequest):
-    """移动音频文件到目标文件夹"""
+    # 移动音频文件到目标文件夹
     config = get_config()
     try:
         new_path = move_audio_file(req.filepath, req.target_folder, config.output_dir)
@@ -194,7 +197,7 @@ async def move_audio(req: MoveRequest):
 
 @router.get("/folders")
 async def get_folders():
-    """获取输出目录下所有文件夹列表"""
+    # 获取输出目录下所有文件夹列表
     config = get_config()
     folders = list_folders(config.output_dir)
     return {"folders": folders}
@@ -202,7 +205,7 @@ async def get_folders():
 
 @router.get("/sources")
 async def get_source_files():
-    """获取输入目录的原始源文件列表"""
+    # 获取输入目录的原始源文件列表
     config = get_config()
     groups = list_source_files(config.input_dir)
     total_files = sum(g["count"] for g in groups)
@@ -214,7 +217,7 @@ async def import_source_files(
     files: List[UploadFile] = File(...),
     subfolder: Optional[str] = Form(default=""),
 ):
-    """导入源音频文件到输入目录"""
+    # 导入源音频文件到输入目录
     config = get_config()
     target_dir = config.input_dir
     if subfolder:
@@ -238,10 +241,27 @@ async def import_source_files(
 
     return {"message": f"已导入 {len(saved)} 个文件", "files": saved}
 
+@router.delete("/remove-source")
+async def remove_source_file(filepath: str):
+    # 删除源音频文件
+    config = get_config()
+    source_path = Path(filepath)
+    try:
+        source_path.resolve().relative_to(config.input_dir.resolve())
+    except ValueError:
+        raise HTTPException(status_code=403, detail="不能删除输入目录外的文件")
+    if not source_path.exists():
+        raise HTTPException(status_code=404, detail="文件不存在")
+    try:
+        source_path.unlink()
+        return {"message": f"已删除源文件"}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"删除失败: {e}")
+
 
 @router.post("/split-at-times")
 async def split_at_times(req: SplitAtTimesRequest):
-    """按用户指定的时间点切分音频"""
+    # 按用户指定的时间点切分音频
     if not Path(req.filepath).exists():
         raise HTTPException(status_code=404, detail="文件不存在")
     try:
@@ -251,4 +271,3 @@ async def split_at_times(req: SplitAtTimesRequest):
         raise HTTPException(status_code=400, detail=str(e))
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"切分失败: {e}")
-

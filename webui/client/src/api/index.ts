@@ -52,6 +52,8 @@ export const audioApi = {
             timeout: 600000,
         })
     },
+    removeSource: (filepath: string) => 
+        api.delete('/audio/remove-source', { params: { filepath } }),
 }
 
 export default api

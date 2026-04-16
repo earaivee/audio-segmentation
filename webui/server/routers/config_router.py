@@ -25,7 +25,7 @@ def get_config() -> SettingConfig:
 
 
 def _config_to_model(config: SettingConfig) -> SettingConfigModel:
-    """将 dataclass 配置转为 Pydantic 模型"""
+    # 将 dataclass 配置转为 Pydantic 模型
     return SettingConfigModel(
         input_dir=str(config.input_dir),
         output_dir=str(config.output_dir),
@@ -49,7 +49,7 @@ def _config_to_model(config: SettingConfig) -> SettingConfigModel:
 
 
 def _apply_model_to_config(model: SettingConfigModel, config: SettingConfig):
-    """将 Pydantic 模型写回 dataclass 配置"""
+    # 将 Pydantic 模型写回 dataclass 配置
     config.input_dir = Path(model.input_dir)
     config.output_dir = Path(model.output_dir)
     config.supported_formats = tuple(model.supported_formats)
@@ -86,20 +86,20 @@ def _apply_model_to_config(model: SettingConfigModel, config: SettingConfig):
 
 @router.get("", response_model=SettingConfigModel)
 async def get_all_config():
-    """获取当前所有配置"""
+    # 获取当前所有配置
     return _config_to_model(_config)
 
 
 @router.put("")
 async def update_all_config(model: SettingConfigModel):
-    """更新所有配置"""
+    # 更新所有配置
     _apply_model_to_config(model, _config)
     return {"message": "配置已更新", "config": _config_to_model(_config)}
 
 
 @router.patch("/{section}")
 async def update_section_config(section: str, data: dict):
-    """更新单个配置段"""
+    # 更新单个配置段
     if section == "vad":
         for k, v in data.items():
             if hasattr(_config.vad, k):
@@ -126,5 +126,5 @@ async def update_section_config(section: str, data: dict):
 
 @router.get("/browse-dirs")
 async def browse_dirs(path: str = ""):
-    """浏览文件系统目录"""
+    # 浏览文件系统目录
     return list_directory(path)

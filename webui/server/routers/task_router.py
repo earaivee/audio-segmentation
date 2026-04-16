@@ -10,7 +10,7 @@ router = APIRouter()
 
 @router.get("/status")
 async def get_task_status():
-    """获取任务状态"""
+    # 获取任务状态
     return {
         "status": task_service.status,
         "progress": task_service.progress,
@@ -21,7 +21,7 @@ async def get_task_status():
 
 @router.post("/run")
 async def run_task():
-    """启动任务"""
+    # 启动任务
     if task_service.is_running():
         raise HTTPException(status_code=400, detail="任务正在运行中")
     
@@ -36,7 +36,7 @@ async def run_task():
 
 @router.post("/stop")
 async def stop_task():
-    """停止任务"""
+    # 停止任务
     if not task_service.is_running():
         raise HTTPException(status_code=400, detail="任务未运行")
     

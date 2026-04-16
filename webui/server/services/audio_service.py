@@ -18,15 +18,13 @@ from src.utils.audio_utils import get_audio_duration
 
 logger = logging.getLogger("audio_service")
 
-# ====== 统一文本存储 (texts.json) ======
-
 def _get_texts_json_path(output_dir: Path) -> Path:
-    """获取 texts.json 的路径"""
+    # 获取 texts.json 的路径
     return output_dir / "texts.json"
 
 
 def load_texts_db(output_dir: Path) -> dict:
-    """加载统一文本存储，兼容旧的单独 .txt 文件"""
+    # 加载统一文本存储
     db_path = _get_texts_json_path(output_dir)
     db: dict = {}
     if db_path.exists():
@@ -38,14 +36,14 @@ def load_texts_db(output_dir: Path) -> dict:
 
 
 def save_texts_db(output_dir: Path, db: dict):
-    """保存统一文本存储"""
+    # 保存统一文本存储
     db_path = _get_texts_json_path(output_dir)
     db_path.parent.mkdir(parents=True, exist_ok=True)
     db_path.write_text(json.dumps(db, ensure_ascii=False, indent=2), encoding="utf-8")
 
 
 def get_text_for_audio(output_dir: Path, audio_stem: str) -> str:
-    """获取音频对应的识别文本，优先从 texts.json 读，兼容旧 .txt 文件"""
+    # 获取音频对应的识别文本
     db = load_texts_db(output_dir)
     if audio_stem in db:
         return db[audio_stem]
@@ -53,14 +51,14 @@ def get_text_for_audio(output_dir: Path, audio_stem: str) -> str:
 
 
 def set_text_for_audio(output_dir: Path, audio_stem: str, text: str):
-    """设置音频对应的识别文本"""
+    # 设置音频对应的识别文本
     db = load_texts_db(output_dir)
     db[audio_stem] = text
     save_texts_db(output_dir, db)
 
 
 def remove_text_for_audio(output_dir: Path, audio_stem: str):
-    """删除音频对应的识别文本"""
+    # 删除音频对应的识别文本
     db = load_texts_db(output_dir)
     if audio_stem in db:
         del db[audio_stem]
@@ -68,14 +66,14 @@ def remove_text_for_audio(output_dir: Path, audio_stem: str):
 
 
 def bulk_set_texts(output_dir: Path, results: dict):
-    """批量设置识别文本"""
+    # 批量设置识别文本
     db = load_texts_db(output_dir)
     db.update(results)
     save_texts_db(output_dir, db)
 
 
 def get_audio_info(filepath: Path, texts_db: dict = None) -> dict:
-    """获取音频文件信息"""
+    # 获取音频文件信息
     try:
         audio = read_audio(str(filepath))
         sr = 16000
@@ -105,7 +103,7 @@ def get_audio_info(filepath: Path, texts_db: dict = None) -> dict:
 
 
 def list_audio_files(output_dir: Path, supported_formats: tuple) -> List[dict]:
-    """获取输出目录下所有音频文件的信息（平铺列表）"""
+    # 获取输出目录下所有音频文件的信息
     # 确保目录存在
     output_dir.mkdir(parents=True, exist_ok=True)
     
@@ -130,7 +128,7 @@ def list_audio_files(output_dir: Path, supported_formats: tuple) -> List[dict]:
 
 
 def list_audio_tree(output_dir: Path, supported_formats: tuple) -> List[dict]:
-    """获取输出目录下所有音频文件，按文件夹分组为树形结构"""
+    # 获取输出目录下所有音频文件，按文件夹分组为树形结构
     # 确保目录存在
     output_dir.mkdir(parents=True, exist_ok=True)
     
@@ -198,7 +196,7 @@ def list_audio_tree(output_dir: Path, supported_formats: tuple) -> List[dict]:
 
 
 def merge_audio_files(filepaths: List[str], output_path: str) -> str:
-    """合并多个音频文件"""
+    # 合并多个音频文件
     sr = 16000
     segments = []
     for fp in filepaths:
@@ -212,7 +210,7 @@ def merge_audio_files(filepaths: List[str], output_path: str) -> str:
 
 
 def split_audio_file(filepath: str, config: SettingConfig) -> List[str]:
-    """切分单个音频文件"""
+    # 切分单个音频文件
     audio = read_audio(filepath)
     sr = 16000
     audio_path = Path(filepath)
@@ -224,12 +222,6 @@ def split_audio_file(filepath: str, config: SettingConfig) -> List[str]:
     timestamps = segmenter.detect_speech_segments(audio, sr, vad_model)
     if not timestamps:
         return []
-
-    # 时长限制已停用
-    # timestamps = segmenter.apply_duration_limit(
-    #     timestamps, audio, sr, vad_model,
-    #     config.segmenter.enabled_double_split, config.segmenter.factor
-    # )
 
     output_dir = audio_path.parent
     output_files = []
@@ -246,7 +238,7 @@ def split_audio_file(filepath: str, config: SettingConfig) -> List[str]:
 
 
 def transcribe_single(filepath: str, config: SettingConfig) -> str:
-    """对单个音频进行 ASR 识别，结果写入 texts.json"""
+    # 对单个音频进行 ASR 识别，结果写入 texts.json
     try:
         asr_model = load_asr_model(config.whisper)
         if asr_model is None:
@@ -268,7 +260,7 @@ def transcribe_single(filepath: str, config: SettingConfig) -> str:
 
 
 def update_audio_text(filepath: str, text: str, output_dir: Path = None):
-    """更新音频对应的识别文本（存入 texts.json）"""
+    # 更新音频对应的识别文本（存入 texts.json）
     audio_path = Path(filepath)
     if output_dir is None:
         # 默认使用音频父目录的父目录作为 output_dir
@@ -277,7 +269,7 @@ def update_audio_text(filepath: str, text: str, output_dir: Path = None):
 
 
 def delete_audio_file(filepath: str, output_dir: Path = None):
-    """删除音频文件及其文本记录"""
+    # 删除音频文件及其文本记录
     audio_path = Path(filepath)
     if output_dir is None:
         output_dir = audio_path.parent.parent
@@ -292,7 +284,7 @@ def delete_audio_file(filepath: str, output_dir: Path = None):
 
 
 def export_training_list(config: SettingConfig, audio_items: List[dict]) -> str:
-    """根据给定的音频项列表重新生成 GPT-SoVITS 训练列表"""
+    # 根据给定的音频项列表重新生成 GPT-SoVITS 训练列表
     lines = []
     for item in audio_items:
         filepath = item.get("filepath", "")
@@ -310,7 +302,7 @@ def export_training_list(config: SettingConfig, audio_items: List[dict]) -> str:
 
 
 def rename_audio_file(filepath: str, new_name: str) -> str:
-    """重命名音频文件及其文本文件，返回新路径"""
+    # 重命名音频文件及其文本文件，返回新路径
     audio_path = Path(filepath)
     if not audio_path.exists():
         raise FileNotFoundError(f"文件不存在: {filepath}")
@@ -337,7 +329,7 @@ def rename_audio_file(filepath: str, new_name: str) -> str:
 
 
 def move_audio_file(filepath: str, target_folder: str, output_dir: Path) -> str:
-    """移动音频文件及其文本文件到目标文件夹，返回新路径"""
+    # 移动音频文件及其文本文件到目标文件夹，返回新路径
     audio_path = Path(filepath)
     if not audio_path.exists():
         raise FileNotFoundError(f"文件不存在: {filepath}")
@@ -367,7 +359,7 @@ def move_audio_file(filepath: str, target_folder: str, output_dir: Path) -> str:
 
 
 def list_folders(output_dir: Path) -> List[str]:
-    """列出输出目录下所有子文件夹名称"""
+    # 列出输出目录下所有子文件夹名称
     if not output_dir.exists():
         return []
     folders = [d.name for d in sorted(output_dir.iterdir()) if d.is_dir()]
@@ -375,7 +367,7 @@ def list_folders(output_dir: Path) -> List[str]:
 
 
 def list_source_files(input_dir: Path) -> List[dict]:
-    """列出输入目录下的原始源文件（递归扫描子目录，按文件夹分组）"""
+    # 列出输入目录下的原始源文件（递归扫描子目录，按文件夹分组）
     if not input_dir.exists():
         return []
 
@@ -422,7 +414,7 @@ def list_source_files(input_dir: Path) -> List[dict]:
 
 
 def list_directory(path: str) -> dict:
-    """浏览指定目录，返回子目录列表"""
+    # 浏览指定目录，返回子目录列表
     import os
     p = Path(path) if path else Path.home()
     if not p.exists():
@@ -457,7 +449,7 @@ def list_directory(path: str) -> dict:
 
 
 def split_audio_at_times(filepath: str, times: List[float]) -> List[str]:
-    """按用户指定的时间点切分音频，纯按时间裁剪不使用 VAD"""
+    # 按用户指定的时间点切分音频，纯按时间裁剪不使用 VAD
     audio = read_audio(filepath)
     sr = 16000
     audio_path = Path(filepath)
