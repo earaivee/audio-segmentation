@@ -44,26 +44,6 @@ class NormalizeConfig:
         assert 0 < self.clipping_threshold  <= 1, "clipping_threshold must be between 0 and 1"
 
 @dataclass
-class SegmenterConfig:
-    # 分割音频配置
-    min_second: int = 3
-    # 目标峰值 音频的最大振幅上限
-    max_second: int = 16
-    # 启用多级分割（当音频大于当前长度时，继续分割直到符合要求）
-    enabled_double_split: bool = True
-    # 多级分割的降级切分因子
-    factor: float = 0.86
-
-    def to_dict(self):
-        return {
-            "min_second": self.min_second,
-            "max_second": self.max_second,
-            "enabled_double_split": self.enabled_double_split,
-            "factor": self.factor,
-        }
-
-
-@dataclass
 class FasterWhisperConfig:
     # Faster-Whisper 语音识别配置
     # 是否启用
@@ -101,6 +81,25 @@ class FasterWhisperConfig:
         }
 
 @dataclass
+class GptSovitsConfig:
+    # GPT-SoVITS 训练列表配置
+    enabled: bool = True
+    # 说话人名称
+    speaker: str = "default"
+    # 语言 (zh, en, ja)
+    language: str = "zh"
+    # 输出文件路径
+    output_path: Path = Path("./resources/output/output.list")
+
+    def to_dict(self):
+        return {
+            "enabled": self.enabled,
+            "speaker": self.speaker,
+            "language": self.language,
+            "output_path": str(self.output_path),
+        }
+
+@dataclass
 class SettingConfig:
     # 应用主配置
     input_dir: Path = Path("./resources/input")
@@ -108,8 +107,8 @@ class SettingConfig:
     supported_formats: Tuple[str, ...] = (".wav", ".mp3")
     vad: VADConfig = field(default_factory=VADConfig)
     normalize: NormalizeConfig = field(default_factory=NormalizeConfig)
-    segmenter: SegmenterConfig = field(default_factory=SegmenterConfig)
     whisper: FasterWhisperConfig = field(default_factory=FasterWhisperConfig)
+    sovits: GptSovitsConfig = field(default_factory=GptSovitsConfig)
 
     def __post_init__(self):
         self.input_dir = Path(self.input_dir)

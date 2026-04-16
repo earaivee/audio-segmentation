@@ -1,129 +1,32 @@
-# 音频智能切分工具 - 基于 Silero VAD
-import gc
-
-from anyio import sleep_until
-from silero_vad import load_silero_vad, read_audio
+# 音频智能切分工具 - WebUI 启动入口
+import uvicorn
+import sys
 from pathlib import Path
-from src.utils.progress_utils import progressBar
-import time
-from src.config.settings import SettingConfig
-from src.processors.normalizer import AudioNormalizer
-from src.processors.segmenter import AudioSegmenter
-from src.utils.asr_utils import batch_transcribe, load_asr_model
-from src.utils.logger import setup_logger
-from src.utils.file_utils import get_audio_files, get_unique_files, get_file_count, rename_folder
-from src.config.errors import FileError, AudioError
-from src.utils.time_utils import get_timestamp
-
-logger = setup_logger(__name__)
-
-class AudioSegmentationApp:
-
-    def __init__(self, config: SettingConfig = None):
-        self.config = config or SettingConfig()
-        self.whisper = config.whisper
-        self.normalizer = AudioNormalizer(self.config.normalize)
-        self.segmenter = (
-            AudioSegmenter(self.config.vad, self.config.segmenter, self.normalizer)
-        )
-        self.model = None
-        self.asr = None
-
-    def setup(self):
-        # 初始化设置  创建输出目录
-        self.config.output_dir.mkdir(parents=True, exist_ok=True)
-        # 加载 VAD 模型
-        logger.info("正在加载 Silero VAD 模型...")
-        self.model = load_silero_vad()
-        logger.info("正在加载 ASR 模型...")
-        self.asr = load_asr_model(self.whisper)
-        logger.info("模型加载完成")
-        logger.info("正在启动主程序...")
-
-    def close(self):
-        # 关闭资源
-        del self.model
-        del self.asr
-        gc.collect()
-
-    def process_file(self, audio_path: Path) -> tuple:
-        # 处理单个文件
-        audio = read_audio(str(audio_path))
-        # 采样率（Sample Rate）
-        sr = 16000
-        # 检测语音片段
-        timestamps = self.segmenter.detect_speech_segments(audio, sr, self.model)
-        if not timestamps:
-            raise AudioError(f"未检测到文件 {audio_path.name} 的语音")
-
-        # 应用时长限制处理
-        timestamps = self.segmenter.apply_duration_limit(timestamps, audio, sr, self.model,
-                                    self.config.segmenter.enabled_double_split, self.config.segmenter.factor)
-
-        # 创建输出目录
-        output_dir = self.config.output_dir / audio_path.stem
-        output_dir.mkdir(parents=True, exist_ok=True)
-
-        segments_info = []
-        for i, ts in enumerate(timestamps, 1):
-            # segment, info = self.segmenter.extract_segment(audio, ts['start'], ts['end'], sr)
-            segment, info = self.segmenter.extract_and_process_segment(
-                audio, ts['start'], ts['end'], sr
-            )
-            output_path = output_dir / f"{audio_path.stem}_seg_{i:04d}.wav"
-            self.segmenter.save_segment(segment, output_path, sr)
-            segments_info.append({
-                "index": i,
-                "file_name": output_path.name,
-                "duration_sec": info["duration_sec"],
-                "original_rms": info["original_rms"],
-                "normalized_rms": info["normalized_rms"]
-            })
-        return len(timestamps), segments_info
-
-    def run(self):
-        logger.info("audio segment program run is successful!")
-        # 运行主流程
-        if not self.config.input_dir.exists():
-            # raise FileError(f"{self.config.input_dir} 文件夹不存在")
-            self.config.input_dir.mkdir(parents=True, exist_ok=True)
-
-        if get_file_count(self.config.output_dir, self.config.supported_formats ) > 0:
-            # raise FileError(f"{self.config.output_dir} 目录已存在文件")
-            timestamp = get_timestamp()
-            new_name = f"{self.config.output_dir.stem}_bak_{timestamp}"
-            rename_folder(self.config.output_dir, new_name)
-            logger.info(f"输出目录已存在，备份目录为: {new_name}")
-
-        # 获取所有文件
-        audio_files = get_unique_files(get_audio_files(self.config.input_dir, self.config.supported_formats ))
-
-        if not audio_files:
-            raise FileError(f"{self.config.input_dir} 无音频源文件")
-
-        # 初始化
-        self.setup()
-
-        # run
-        with progressBar(len(audio_files)) as progress:
-            for idx, audio_file in enumerate(audio_files, 1):
-                try:
-                    segment_count, segments = self.process_file(audio_file)
-                except Exception as e:
-                    raise AudioError()
-                progress()
-                print(f"音频 {audio_file.name} 已切分完成, 片段数: {segment_count}")
-
-        # logger.info(f"正在进行音频识别......")
-        # batch_transcribe(self.asr, self.config.whisper, get_audio_files(self.config.output_dir, self.config.supported_formats ))
 
 def main():
-    # 入口函数
-    config = SettingConfig()
-    app = AudioSegmentationApp(config)
-    app.run()
-    logger.info("audio segment task is completed!")
-
+    """启动 WebUI 服务"""
+    print("="*50)
+    print("音频智能切分工具 - WebUI 版本")
+    print("="*50)
+    
+    # 添加项目根目录到 Python 路径
+    project_root = Path(__file__).parent
+    if str(project_root) not in sys.path:
+        sys.path.insert(0, str(project_root))
+    
+    print("正在启动 WebUI 服务器...")
+    print("访问地址: http://localhost:8000")
+    print("按 Ctrl+C 停止服务")
+    print("="*50)
+    
+    # 启动 FastAPI 服务器
+    uvicorn.run(
+        "src.app:create_app",
+        host="0.0.0.0",
+        port=8000,
+        reload=False,
+        log_level="info"
+    )
 
 if __name__ == "__main__":
     main()
