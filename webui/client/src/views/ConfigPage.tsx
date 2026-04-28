@@ -21,8 +21,8 @@ export default defineComponent({
             supported_formats: ['.wav', '.mp3'],
             vad: { threshold: 0.5, min_silence_duration_ms: 720, min_speech_duration_ms: 600, speech_pad_ms: 200 },
             normalize: { enabled: true, method: 'rms', target_rms: 0.15, target_peak: 0.95, clipping_threshold: 0.99 },
-            whisper: { enabled: true, model: 'medium', device: 'cpu', compute_type: 'int8', cpu_threads: 4, language: 'zh', task: 'transcribe', initial_prompt: null },
-            sovits: { enabled: true, speaker: 'output', language: 'ZH', output_path: './resources/output.list' },
+            faster_whisper: { enabled: true, model_size: 'medium', model_path: './models/faster-whisper-medium', device: 'cpu', compute_type: 'int8', language: 'zh', beam_size: 5 },
+            sovits: { enabled: true, format_type: 'gpt_sovits', speaker: 'output', language: 'ZH', output_path: './resources/output.list' },
         })
         const configLoaded = ref(false)
         const saving = ref(false)
@@ -66,18 +66,6 @@ export default defineComponent({
 
         // 深度监听 config 变化自动保存
         watch(config, () => { autoSave() }, { deep: true })
-
-        // 监听设备变化，自动调整compute_type推荐值
-        watch(
-            () => config.value.whisper?.device,
-            (newDevice) => {
-                if (newDevice === 'cuda' && config.value.whisper.compute_type === 'int8') {
-                    config.value.whisper.compute_type = 'float16'
-                } else if (newDevice === 'cpu' && config.value.whisper.compute_type === 'float16') {
-                    config.value.whisper.compute_type = 'int8'
-                }
-            }
-        )
 
         const openBrowse = (currentValue: string, field: string) => {
             browseField.value = field
@@ -138,7 +126,7 @@ export default defineComponent({
                         </NSpace>
                     ),
                 }}>
-                    <NTabs type="line" animated>
+                    <NTabs type="line">
                         {/* Tab 1: 基础配置 */}
                         <NTabPane name="basic" tab="基础配置">
                             <div style="padding: 16px 0">
@@ -249,58 +237,50 @@ export default defineComponent({
                         {/* Tab 3: 语音识别 */}
                         <NTabPane name="whisper" tab="语音识别">
                             <div style="padding: 16px 0">
-                                <NSpace align="center" style="margin-bottom: 16px">
-                                    <span style="font-weight: 500">启用 Faster-Whisper</span>
-                                    <NSwitch v-model:value={config.value.whisper.enabled} />
-                                </NSpace>
+                                <h4 style="margin: 0 0 12px; color: #333; display: flex; align-items: center; gap: 12px">
+                                    faster-whisper
+                                    <NSwitch v-model:value={config.value.faster_whisper.enabled} />
+                                </h4>
                                 <NGrid cols={2} xGap={16} yGap={4}>
-                                    <NGi>
-                                        <NFormItem label="模型">
-                                            <NSelect v-model:value={config.value.whisper.model} options={[
-                                                { label: 'tiny', value: 'tiny' },
-                                                { label: 'base', value: 'base' },
-                                                { label: 'small', value: 'small' },
-                                                { label: 'medium', value: 'medium' },
-                                                { label: 'large', value: 'large' },
-                                            ]} />
+                                    <NGi span={2}>
+                                        <NFormItem label="模型路径 / 模型名">
+                                            <NInput v-model:value={config.value.faster_whisper.model_path}
+                                                    placeholder="留空使用 {model_size} 自动下载，或填本地模型路径" />
                                         </NFormItem>
                                     </NGi>
                                     <NGi>
                                         <NFormItem label="设备">
-                                            <NSelect v-model:value={config.value.whisper.device} options={[
+                                            <NSelect v-model:value={config.value.faster_whisper.device} options={[
                                                 { label: 'CPU', value: 'cpu' },
                                                 { label: 'CUDA (GPU)', value: 'cuda' },
                                             ]} />
                                         </NFormItem>
                                     </NGi>
                                     <NGi>
-                                        <NFormItem label="量化类型">
-                                            <NSelect v-model:value={config.value.whisper.compute_type} options={[
-                                                { label: 'int8 (推荐CPU)', value: 'int8' },
-                                                { label: 'float16 (推荐GPU)', value: 'float16' },
+                                        <NFormItem label="计算精度">
+                                            <NSelect v-model:value={config.value.faster_whisper.compute_type} options={[
+                                                { label: 'int8', value: 'int8' },
+                                                { label: 'int8_float16', value: 'int8_float16' },
+                                                { label: 'int8_float32', value: 'int8_float32' },
+                                                { label: 'float16', value: 'float16' },
                                                 { label: 'float32', value: 'float32' },
                                             ]} />
                                         </NFormItem>
                                     </NGi>
                                     <NGi>
                                         <NFormItem label="语言">
-                                            <NSelect v-model:value={config.value.whisper.language} options={[
+                                            <NSelect v-model:value={config.value.faster_whisper.language} options={[
                                                 { label: '中文', value: 'zh' },
                                                 { label: '英文', value: 'en' },
-                                                { label: '自动检测', value: '' },
+                                                { label: '日文', value: 'ja' },
+                                                { label: '韩文', value: 'ko' },
+                                                { label: '自动检测', value: 'auto' },
                                             ]} />
                                         </NFormItem>
                                     </NGi>
-                                    {config.value.whisper.device === 'cpu' && (
-                                        <NGi>
-                                            <NFormItem label="CPU 线程数">
-                                                <NInputNumber v-model:value={config.value.whisper.cpu_threads} min={1} max={32} style="width: 100%" />
-                                            </NFormItem>
-                                        </NGi>
-                                    )}
                                     <NGi>
-                                        <NFormItem label="初始提示">
-                                            <NInput v-model:value={config.value.whisper.initial_prompt} placeholder="可选，用于提高准确率" />
+                                        <NFormItem label="Beam Size">
+                                            <NInputNumber v-model:value={config.value.faster_whisper.beam_size} min={1} max={10} step={1} style="width: 100%" />
                                         </NFormItem>
                                     </NGi>
                                 </NGrid>
@@ -311,24 +291,44 @@ export default defineComponent({
                         <NTabPane name="sovits" tab="推理文本">
                             <div style="padding: 16px 0">
                                 <NSpace align="center" style="margin-bottom: 16px">
-                                    <span style="font-weight: 500">启用 GPT-SoVITS 训练列表</span>
+                                    <span style="font-weight: 500">启用训练列表导出</span>
                                     <NSwitch v-model:value={config.value.sovits.enabled} />
                                 </NSpace>
                                 <NGrid cols={2} xGap={16} yGap={4}>
-                                    <NGi>
-                                        <NFormItem label="说话人名称">
-                                            <NInput v-model:value={config.value.sovits.speaker} />
-                                        </NFormItem>
-                                    </NGi>
-                                    <NGi>
-                                        <NFormItem label="语言标签">
-                                            <NSelect v-model:value={config.value.sovits.language} options={[
-                                                { label: 'ZH (中文)', value: 'ZH' },
-                                                { label: 'EN (英文)', value: 'EN' },
-                                                { label: 'JA (日文)', value: 'JA' },
+                                    <NGi span={2}>
+                                        <NFormItem label="导出格式">
+                                            <NSelect v-model:value={config.value.sovits.format_type} options={[
+                                                { label: 'GPT-SoVITS (wav|speaker|lang|text)', value: 'gpt_sovits' },
+                                                { label: 'VITS (wav|speaker|text)', value: 'vits' },
+                                                { label: 'Bert-VITS2 (wav|speaker|lang|text)', value: 'bert_vits2' },
+                                                { label: 'RVC (wav|text)', value: 'rvc' },
+                                                { label: 'RVC 仅路径 (wav)', value: 'rvc_wav_only' },
+                                                { label: 'IndexTTS (wav|text)', value: 'index_tts' },
+                                                { label: 'Fish Speech (wav\\ttext)', value: 'fish_speech' },
                                             ]} />
                                         </NFormItem>
                                     </NGi>
+                                    {(config.value.sovits.format_type === 'gpt_sovits'
+                                      || config.value.sovits.format_type === 'vits'
+                                      || config.value.sovits.format_type === 'bert_vits2') && (
+                                        <NGi>
+                                            <NFormItem label="说话人名称">
+                                                <NInput v-model:value={config.value.sovits.speaker} />
+                                            </NFormItem>
+                                        </NGi>
+                                    )}
+                                    {(config.value.sovits.format_type === 'gpt_sovits'
+                                      || config.value.sovits.format_type === 'bert_vits2') && (
+                                        <NGi>
+                                            <NFormItem label="语言标签">
+                                                <NSelect v-model:value={config.value.sovits.language} options={[
+                                                    { label: 'ZH (中文)', value: 'ZH' },
+                                                    { label: 'EN (英文)', value: 'EN' },
+                                                    { label: 'JA (日文)', value: 'JA' },
+                                                ]} />
+                                            </NFormItem>
+                                        </NGi>
+                                    )}
                                     <NGi span={2}>
                                         <NFormItem label="输出列表路径">
                                             {DirInput({
@@ -393,8 +393,8 @@ export default defineComponent({
                                     单击选中，双击进入目录
                                 </div>
                             </NSpace>
-                        ),
-                    }}
+                            ),
+                        }}
                 </NModal>
             </div>
         )

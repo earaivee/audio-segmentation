@@ -52,8 +52,11 @@ export const audioApi = {
             timeout: 600000,
         })
     },
-    removeSource: (filepath: string) => 
+    removeSource: (filepath: string) =>
         api.delete('/audio/remove-source', { params: { filepath } }),
+    convertToWav: (filepath: string) => api.post('/audio/convert-to-wav', {}, { params: { filepath } }),
+    convertAudio: (filepath: string, outputFormat: string) =>
+        api.post('/audio/convert', { filepath, output_format: outputFormat }),
 }
 
 export default api

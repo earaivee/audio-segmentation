@@ -11,7 +11,7 @@ import {
     DownloadOutline, TrashOutline, GitMergeOutline, CutOutline, MicOutline,
     FolderOpenOutline, PencilOutline, SwapHorizontalOutline,
     VideocamOutline, DocumentTextOutline, FolderOutline, AlbumsOutline,
-    CloudUploadOutline,
+    CloudUploadOutline, SyncOutline,
 } from '@vicons/ionicons5'
 import { audioApi } from '../api'
 import WaveformSplitModal from './WaveformSplitModal'
@@ -71,6 +71,12 @@ export default defineComponent({
         const playingSource = ref('')
         const currentSourceAudio = ref<HTMLAudioElement | null>(null)
         const importing = ref(false)
+        const converting = ref(false)
+
+        // 格式转换弹窗
+        const convertModalVisible = ref(false)
+        const convertTarget = ref<{ filepath: string; filename: string } | null>(null)
+        const convertFormat = ref('wav')
 
         // 改名弹窗
         const renameModalVisible = ref(false)
@@ -180,9 +186,30 @@ export default defineComponent({
             }
         }
 
+        const convertSourceFile = async (filepath: string, filename: string) => {
+            convertTarget.value = { filepath, filename }
+            convertFormat.value = 'wav'
+            convertModalVisible.value = true
+        }
+
+        const confirmConvert = async () => {
+            if (!convertTarget.value) return
+            const { filepath, filename } = convertTarget.value
+            converting.value = true
+            try {
+                await audioApi.convertAudio(filepath, convertFormat.value)
+                message.success(`已转换: ${filename} -> ${convertFormat.value.toUpperCase()}`)
+                convertModalVisible.value = false
+                await loadSources()
+            } catch (e: any) {
+                message.error(e.response?.data?.detail || '转换失败')
+            } finally {
+                converting.value = false
+            }
+        }
+
         const deleteSourceFile = async (filepath: string, filename: string) => {
             try {
-                // 停止播放
                 if (playingSource.value === filepath) {
                     if (currentSourceAudio.value) {
                         currentSourceAudio.value.pause()
@@ -192,7 +219,7 @@ export default defineComponent({
                 }
                 await audioApi.removeSource(filepath)
                 message.success(`已删除: ${filename}`)
-                await loadSources() // 刷新列表
+                await loadSources()
             } catch (e: any) {
                 message.error(e.response?.data?.detail || '删除失败')
             }
@@ -584,6 +611,24 @@ export default defineComponent({
                                  options={folderOptions.value} placeholder="选择目标文件夹" />
                     </NSpace>
                 </NModal>,
+                <NModal show={convertModalVisible.value}
+                        onUpdateShow={(val: boolean) => { convertModalVisible.value = val }}
+                        preset="dialog" title="格式转换" positiveText="开始转换" negativeText="取消"
+                        onPositiveClick={confirmConvert}>
+                    <NSpace vertical>
+                        <p>将转换文件: {convertTarget.value?.filename}</p>
+                        <NSelect value={convertFormat.value}
+                                 onUpdateValue={(v: string) => { convertFormat.value = v }}
+                                 options={[
+                                     { label: 'WAV (无损 / 16kHz 单声道)', value: 'wav' },
+                                     { label: 'MP3 (192kbps)', value: 'mp3' },
+                                     { label: 'FLAC (无损压缩)', value: 'flac' },
+                                     { label: 'OGG (有损压缩)', value: 'ogg' },
+                                     { label: 'AAC (ADTS)', value: 'aac' },
+                                     { label: 'M4A (AAC / MP4 容器)', value: 'm4a' },
+                                 ]} placeholder="选择目标格式" />
+                    </NSpace>
+                </NModal>,
                 <WaveformSplitModal
                     show={splitModalVisible.value}
                     {...{ 'onUpdate:show': (val: boolean) => { splitModalVisible.value = val }, 'onSplit-done': onSplitDone }}
@@ -591,10 +636,11 @@ export default defineComponent({
                     filename={splitTarget.value?.filename || ''}
                     durationSec={splitTarget.value?.duration_sec || 0}
                 />,
-                // 查看推理文本弹窗
+                // 查看推理文本弹窗（全屏）
                 <NModal show={outputListModalVisible.value}
                         onUpdateShow={(val: boolean) => { outputListModalVisible.value = val }}
-                        preset="card" title="推理文本 (output.list)" style="width: 1000px; height: 700px">
+                        preset="card" title="推理文本 (output.list)"
+                        style="width: 100vw; height: 100vh; border-radius: 0">
                     {{
                         default: () => (
                             <NSpace vertical size="medium" style="height: 100%">
@@ -692,9 +738,17 @@ export default defineComponent({
                                                                  onClick={() => playSource(sf.filepath)}>
                                                             {{ icon: () => <NIcon size={16}>{isPlaying ? <StopCircleOutline /> : <PlayCircleOutline />}</NIcon> }}
                                                         </NButton>
-                                                         <NPopconfirm 
+                                                        <NTooltip>
+                                                            {{ trigger: () => (
+                                                                <NButton size="tiny" circle type="warning" quaternary loading={converting.value}
+                                                                         onClick={() => convertSourceFile(sf.filepath, sf.filename)}>
+                                                                    {{ icon: () => <NIcon size={16}><SyncOutline /></NIcon> }}
+                                                                </NButton>
+                                                            ), default: () => '格式转换' }}
+                                                        </NTooltip>
+                                                         <NPopconfirm
                                                             onPositiveClick={() => deleteSourceFile(sf.filepath, sf.filename)}
-                                                            positiveText="删除" 
+                                                            positiveText="删除"
                                                             negativeText="取消"
                                                         >
                                                             {{

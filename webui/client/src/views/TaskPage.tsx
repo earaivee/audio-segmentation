@@ -1,48 +1,41 @@
 import { defineComponent, ref, onMounted, onUnmounted } from 'vue'
 import {
-    NCard, NButton, NProgress, NSpace, NScrollbar, NTag, NAlert,
-    NSteps, NStep, NIcon, useMessage,
+    NCard, NButton, NProgress, NSpace, NScrollbar, NTag,
+    NSteps, NStep, useMessage,
 } from 'naive-ui'
-import {
-    CheckmarkCircleOutline, EllipseOutline, AlertCircleOutline,
-} from '@vicons/ionicons5'
 import { taskApi } from '../api'
+
+type Stage = 'preparing' | 'segmenting' | 'transcribing' | 'inferring' | 'completed' | 'error'
+
+const STAGE_LABELS: Record<Stage, string> = {
+    preparing: '准备',
+    segmenting: '切分音频',
+    transcribing: '识别音频',
+    inferring: '推理',
+    completed: '完成',
+    error: '错误',
+}
+
+const STAGE_CURRENT: Record<Stage, number> = {
+    preparing: 1,
+    segmenting: 2,
+    transcribing: 3,
+    inferring: 4,
+    completed: 5,
+    error: 5,
+}
 
 export default defineComponent({
     name: 'TaskPage',
     setup() {
         const message = useMessage()
         const status = ref('idle')
+        const stage = ref<Stage>('preparing')
         const progress = ref(0)
         const statusMessage = ref('')
         const logs = ref<string[]>([])
-        const currentStep = ref(0)
         let ws: WebSocket | null = null
         let pollTimer: number | null = null
-
-        const statusColorMap: Record<string, string> = {
-            idle: 'default',
-            running: 'info',
-            completed: 'success',
-            error: 'error',
-        }
-
-        const statusTextMap: Record<string, string> = {
-            idle: '空闲',
-            running: '运行中',
-            completed: '已完成',
-            error: '出错',
-        }
-
-        // 根据进度计算当前步骤
-        const updateStep = (p: number) => {
-            if (p <= 0) currentStep.value = 0
-            else if (p < 0.05) currentStep.value = 1  // 加载模型
-            else if (p < 0.7) currentStep.value = 2   // 音频切分
-            else if (p < 0.95) currentStep.value = 3  // 语音识别
-            else if (p < 1.0) currentStep.value = 4   // 生成列表
-            else currentStep.value = 5                  // 完成
-        }
 
         const connectWs = () => {
             const protocol = location.protocol === 'https:' ? 'wss:' : 'ws:'
@@ -68,10 +61,10 @@ export default defineComponent({
                             logs.value = [...data.logs]
                         }
                     } else if (data.type === 'progress') {
-                        progress.value = Math.round((data.progress || 0) * 100)
+                        progress.value = Math.round(data.progress || 0)
                         statusMessage.value = data.message || ''
                         status.value = data.status || status.value
-                        updateStep(data.progress || 0)
+                        if (data.stage) stage.value = data.stage
                     }
                 } catch {}
             }
@@ -92,9 +85,9 @@ export default defineComponent({
                 const newStatus = res.data.status
                 const p = res.data.progress || 0
                 status.value = newStatus
-                progress.value = Math.round(p * 100)
+                progress.value = Math.round(p)
                 statusMessage.value = res.data.message || ''
-                updateStep(p)
+                if (res.data.stage) stage.value = res.data.stage
 
                 // 任务运行中时缩短轮询间隔，否则恢复正常间隔
                 adjustPolling(newStatus === 'running')
@@ -111,7 +104,7 @@ export default defineComponent({
             try {
                 logs.value = []
                 progress.value = 0
-                currentStep.value = 0
+                stage.value = 'preparing'
                 const res = await taskApi.run()
                 if (res.data.error) {
                     message.warning(res.data.error)
@@ -144,13 +137,6 @@ export default defineComponent({
             if (pollTimer) clearInterval(pollTimer)
         })
 
-        const stepStatus = (step: number): 'process' | 'finish' | 'wait' | 'error' => {
-            if (status.value === 'error' && currentStep.value === step) return 'error'
-            if (step < currentStep.value) return 'finish'
-            if (step === currentStep.value && status.value === 'running') return 'process'
-            return 'wait'
-        }
-
         return () => (
             <div>
                 <NSpace vertical size="large">
@@ -159,8 +145,8 @@ export default defineComponent({
                         <NSpace vertical size="medium">
                             <NSpace align="center">
                                 <span>状态：</span>
-                                <NTag type={statusColorMap[status.value] as any}>
-                                    {statusTextMap[status.value] || status.value}
+                                <NTag type={status.value === 'idle' ? 'default' : status.value === 'running' ? 'info' : status.value === 'completed' ? 'success' : 'error'}>
+                                    {status.value === 'idle' ? '空闲' : status.value === 'running' ? '运行中' : status.value === 'completed' ? '已完成' : '出错'}
                                 </NTag>
                                 {statusMessage.value && (
                                     <span style="color: #666; font-size: 13px">{statusMessage.value}</span>
@@ -178,13 +164,11 @@ export default defineComponent({
                             />
 
                             {/* 步骤指示器 */}
-                            <NSteps current={currentStep.value} size="small" style="margin: 8px 0">
-                                <NStep title="准备" description="等待启动" />
-                                <NStep title="加载模型" description="前置处理" />
-                                <NStep title="音频切分" description="分段处理" />
-                                <NStep title="语音识别" description="ASR 识别" />
-                                <NStep title="生成列表" description="训练数据" />
-                                <NStep title="完成" description="" />
+                            <NSteps current={STAGE_CURRENT[stage.value]} size="small" style="margin: 8px 0">
+                                <NStep title={STAGE_LABELS.preparing} description="等待启动" />
+                                <NStep title={STAGE_LABELS.segmenting} description="分段处理" />
+                                <NStep title={STAGE_LABELS.transcribing} description="ASR 识别" />
+                                <NStep title={STAGE_LABELS.inferring} description="待实现" />
                             </NSteps>
 
                             <NSpace>

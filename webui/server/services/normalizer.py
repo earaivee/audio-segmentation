@@ -1,3 +1,5 @@
+# webui/server/services/normalizer.py
+
 import torch
 
 from ..config.errors import CaseError
@@ -6,32 +8,30 @@ from ..utils.logger import setup_logger
 
 logger = setup_logger(__name__)
 
+
 class AudioNormalizer:
-    # 音频音量归一化器
+    # 音频音量归一化处理类
 
     def __init__(self, config: NormalizeConfig):
+        # 初始化归一化器，加载配置
         self.config = config
 
     def normalize_peak(self, audio: torch.Tensor) -> torch.Tensor:
-        # 峰值归一化
+        # 峰值归一化：将音频最大振幅调整到目标峰值
         max_val = torch.abs(audio).max()
         if max_val > 1e-6:
             audio = audio / max_val * self.config.target_peak
         return audio
 
     def normalize_rms(self, audio: torch.Tensor) -> torch.Tensor:
-        # RMS 响度归一化
+        # RMS 归一化：将音频均方根调整到目标 RMS 值
         rms = torch.sqrt(torch.mean(audio ** 2))
         if rms > 1e-6:
             audio = audio / rms * self.config.target_rms
-        # 防削波
-        max_val = torch.abs(audio).max()
-        if max_val > 0.95:
-            audio = audio / max_val * 0.95
         return audio
 
     def normalize(self, audio: torch.Tensor) -> torch.Tensor:
-        # 统一归一化接口
+        # 根据配置的归一化方法对音频进行归一化
         if not self.config.enabled:
             return audio
         if self.config.method == "peak":
@@ -39,5 +39,4 @@ class AudioNormalizer:
         elif self.config.method == "rms":
             return self.normalize_rms(audio)
         else:
-            # return self.normalize_rms(audio)
             raise CaseError()

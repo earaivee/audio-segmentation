@@ -5,26 +5,30 @@ import torch
 import torchaudio
 import json
 import soundfile as sf
+import os
+import subprocess
 from pathlib import Path
 from typing import List, Optional
 import logging
 
+from pydub import AudioSegment
 from silero_vad import load_silero_vad, read_audio
-from src.config.settings import SettingConfig
-from src.processors.normalizer import AudioNormalizer
-from src.processors.segmenter import AudioSegmenter
-from src.utils.asr_utils import transcribe_audio, load_asr_model
-from src.utils.audio_utils import get_audio_duration
+from ..config.settings import SettingConfig
+from .normalizer import AudioNormalizer
+from .segmenter import AudioSegmenter
+from ..utils.asr_utils import transcribe_audio, load_faster_whisper_model
+from ..utils.audio_utils import get_audio_duration
 
 logger = logging.getLogger("audio_service")
 
+
 def _get_texts_json_path(output_dir: Path) -> Path:
-    # 获取 texts.json 的路径
+    # 获取 texts.json 数据库文件路径
     return output_dir / "texts.json"
 
 
 def load_texts_db(output_dir: Path) -> dict:
-    # 加载统一文本存储
+    # 从 output_dir 加载 texts.json 数据库
     db_path = _get_texts_json_path(output_dir)
     db: dict = {}
     if db_path.exists():
@@ -36,14 +40,14 @@ def load_texts_db(output_dir: Path) -> dict:
 
 
 def save_texts_db(output_dir: Path, db: dict):
-    # 保存统一文本存储
+    # 保存 texts.json 数据库到 output_dir
     db_path = _get_texts_json_path(output_dir)
     db_path.parent.mkdir(parents=True, exist_ok=True)
     db_path.write_text(json.dumps(db, ensure_ascii=False, indent=2), encoding="utf-8")
 
 
 def get_text_for_audio(output_dir: Path, audio_stem: str) -> str:
-    # 获取音频对应的识别文本
+    # 从文本数据库中获取指定音频的识别文本
     db = load_texts_db(output_dir)
     if audio_stem in db:
         return db[audio_stem]
@@ -51,14 +55,14 @@ def get_text_for_audio(output_dir: Path, audio_stem: str) -> str:
 
 
 def set_text_for_audio(output_dir: Path, audio_stem: str, text: str):
-    # 设置音频对应的识别文本
+    # 保存指定音频的识别文本到数据库
     db = load_texts_db(output_dir)
     db[audio_stem] = text
     save_texts_db(output_dir, db)
 
 
 def remove_text_for_audio(output_dir: Path, audio_stem: str):
-    # 删除音频对应的识别文本
+    # 从文本数据库中删除指定音频的识别文本
     db = load_texts_db(output_dir)
     if audio_stem in db:
         del db[audio_stem]
@@ -66,20 +70,19 @@ def remove_text_for_audio(output_dir: Path, audio_stem: str):
 
 
 def bulk_set_texts(output_dir: Path, results: dict):
-    # 批量设置识别文本
+    # 批量更新文本数据库
     db = load_texts_db(output_dir)
     db.update(results)
     save_texts_db(output_dir, db)
 
 
 def get_audio_info(filepath: Path, texts_db: dict = None) -> dict:
-    # 获取音频文件信息
+    # 获取单个音频文件的基本信息（时长、文件路径、文本等）
     try:
         audio = read_audio(str(filepath))
         sr = 16000
         duration = get_audio_duration(audio, sr)
 
-        # 从 texts_db 中读取文本
         text = ""
         if texts_db is not None and filepath.stem in texts_db:
             text = texts_db[filepath.stem]
@@ -103,10 +106,9 @@ def get_audio_info(filepath: Path, texts_db: dict = None) -> dict:
 
 
 def list_audio_files(output_dir: Path, supported_formats: tuple) -> List[dict]:
-    # 获取输出目录下所有音频文件的信息
-    # 确保目录存在
+    # 列出输出目录下的所有音频文件信息（去重、排序）
     output_dir.mkdir(parents=True, exist_ok=True)
-    
+
     if not output_dir.exists():
         return []
 
@@ -115,7 +117,6 @@ def list_audio_files(output_dir: Path, supported_formats: tuple) -> List[dict]:
         audio_files.extend(output_dir.glob(f"**/*{ext}"))
         audio_files.extend(output_dir.glob(f"**/*{ext.upper()}"))
 
-    # 去重并排序
     seen = set()
     unique = []
     for f in sorted(audio_files):
@@ -128,10 +129,9 @@ def list_audio_files(output_dir: Path, supported_formats: tuple) -> List[dict]:
 
 
 def list_audio_tree(output_dir: Path, supported_formats: tuple) -> List[dict]:
-    # 获取输出目录下所有音频文件，按文件夹分组为树形结构
-    # 确保目录存在
+    # 按文件夹分组列出音频文件树形结构
     output_dir.mkdir(parents=True, exist_ok=True)
-    
+
     if not output_dir.exists():
         return []
 
@@ -140,7 +140,6 @@ def list_audio_tree(output_dir: Path, supported_formats: tuple) -> List[dict]:
         audio_files.extend(output_dir.glob(f"**/*{ext}"))
         audio_files.extend(output_dir.glob(f"**/*{ext.upper()}"))
 
-    # 去重并排序
     seen = set()
     unique = []
     for f in sorted(audio_files):
@@ -149,19 +148,16 @@ def list_audio_tree(output_dir: Path, supported_formats: tuple) -> List[dict]:
             seen.add(key)
             unique.append(f)
 
-    # 按父目录分组
     from collections import OrderedDict
     groups: OrderedDict[str, list] = OrderedDict()
     for f in unique:
         parent = f.parent.name
-        # 如果文件直接在 output_dir 下，归入 "未分组"
         if f.parent.resolve() == output_dir.resolve():
             parent = "_root_"
         if parent not in groups:
             groups[parent] = []
         groups[parent].append(f)
 
-    # 加载 texts.json
     texts_db = load_texts_db(output_dir)
 
     tree = []
@@ -170,13 +166,11 @@ def list_audio_tree(output_dir: Path, supported_formats: tuple) -> List[dict]:
         total_duration = 0.0
         for f in folder_files:
             info = get_audio_info(f, texts_db=texts_db)
-            # 为子节点添加简短名称（去掉文件夹前缀）
             seg_name = f.stem
             if seg_name.startswith(folder_name):
                 seg_name = seg_name[len(folder_name):].lstrip("_")
             info["seg_name"] = seg_name or f.stem
             info["key"] = str(f.resolve())
-            # 根目录文件的 parent_dir 设为空字符串，避免删除/移动时路径错误
             if folder_name == "_root_":
                 info["parent_dir"] = ""
             children.append(info)
@@ -196,7 +190,7 @@ def list_audio_tree(output_dir: Path, supported_formats: tuple) -> List[dict]:
 
 
 def merge_audio_files(filepaths: List[str], output_path: str) -> str:
-    # 合并多个音频文件
+    # 合并多个音频文件为一个 WAV 文件
     sr = 16000
     segments = []
     for fp in filepaths:
@@ -210,7 +204,7 @@ def merge_audio_files(filepaths: List[str], output_path: str) -> str:
 
 
 def split_audio_file(filepath: str, config: SettingConfig) -> List[str]:
-    # 切分单个音频文件
+    # 使用 VAD 自动检测语音片段并切分音频
     audio = read_audio(filepath)
     sr = 16000
     audio_path = Path(filepath)
@@ -238,19 +232,17 @@ def split_audio_file(filepath: str, config: SettingConfig) -> List[str]:
 
 
 def transcribe_single(filepath: str, config: SettingConfig) -> str:
-    # 对单个音频进行 ASR 识别，结果写入 texts.json
+    # 对单个音频文件执行 ASR 语音识别
     try:
-        asr_model = load_asr_model(config.whisper)
-        if asr_model is None:
-            logger.warning("ASR 模型未启用或加载失败")
+        fw_model = load_faster_whisper_model(config.faster_whisper)
+        if fw_model is None:
+            logger.warning("faster-whisper 模型未启用")
             return ""
 
-        text = transcribe_audio(asr_model, config.whisper, Path(filepath))
-        # 写入 texts.json
+        text = transcribe_audio(fw_model, config.faster_whisper, Path(filepath))
         set_text_for_audio(config.output_dir, Path(filepath).stem, text)
 
-        # 清理模型释放内存
-        del asr_model
+        del fw_model
         torch.cuda.empty_cache() if torch.cuda.is_available() else None
 
         return text
@@ -260,38 +252,53 @@ def transcribe_single(filepath: str, config: SettingConfig) -> str:
 
 
 def update_audio_text(filepath: str, text: str, output_dir: Path = None):
-    # 更新音频对应的识别文本（存入 texts.json）
+    # 手动更新指定音频文件的识别文本
     audio_path = Path(filepath)
     if output_dir is None:
-        # 默认使用音频父目录的父目录作为 output_dir
         output_dir = audio_path.parent.parent
     set_text_for_audio(output_dir, audio_path.stem, text)
 
 
 def delete_audio_file(filepath: str, output_dir: Path = None):
-    # 删除音频文件及其文本记录
+    # 删除音频文件及其关联的文本文件和识别文本数据库记录
     audio_path = Path(filepath)
     if output_dir is None:
         output_dir = audio_path.parent.parent
     if audio_path.exists():
         audio_path.unlink()
-    # 从 texts.json 中删除
     remove_text_for_audio(output_dir, audio_path.stem)
-    # 兼容清理旧 .txt 文件
-    txt_path = audio_path.parent / f"{audio_path.stem}.txt"
-    if txt_path.exists():
-        txt_path.unlink()
 
 
 def export_training_list(config: SettingConfig, audio_items: List[dict]) -> str:
-    # 根据给定的音频项列表重新生成 GPT-SoVITS 训练列表
+    # 导出训练列表文件，支持多种 TTS/VC 模型格式
     lines = []
+    fmt = config.sovits.format_type
+    speaker = config.sovits.speaker
+    language = config.sovits.language
+
     for item in audio_items:
         filepath = item.get("filepath", "")
         text = item.get("text", "")
-        if filepath and text:
-            line = f"{filepath}|{config.sovits.speaker}|{config.sovits.language}|{text}"
-            lines.append(line)
+        if not filepath or not text:
+            continue
+
+        if fmt == "gpt_sovits":
+            line = f"{filepath}|{speaker}|{language}|{text}"
+        elif fmt == "vits":
+            line = f"{filepath}|{speaker}|{text}"
+        elif fmt == "bert_vits2":
+            line = f"{filepath}|{speaker}|{language}|{text}"
+        elif fmt == "rvc":
+            line = f"{filepath}|{text}"
+        elif fmt == "rvc_wav_only":
+            line = filepath
+        elif fmt == "index_tts":
+            line = f"{filepath}|{text}"
+        elif fmt == "fish_speech":
+            line = f"{filepath}\t{text}"
+        else:
+            line = f"{filepath}|{speaker}|{language}|{text}"
+        lines.append(line)
 
     if lines:
         output_path = Path(config.sovits.output_path)
@@ -302,12 +309,11 @@ def export_training_list(config: SettingConfig, audio_items: List[dict]) -> str:
 
 
 def rename_audio_file(filepath: str, new_name: str) -> str:
-    # 重命名音频文件及其文本文件，返回新路径
+    # 重命名音频文件（同时处理同名 .txt 文件）
     audio_path = Path(filepath)
     if not audio_path.exists():
         raise FileNotFoundError(f"文件不存在: {filepath}")
 
-    # 确保新名称有正确扩展名
     ext = audio_path.suffix
     if not new_name.endswith(ext):
         new_name = new_name + ext
@@ -316,25 +322,17 @@ def rename_audio_file(filepath: str, new_name: str) -> str:
     if new_path.exists() and new_path != audio_path:
         raise FileExistsError(f"目标文件已存在: {new_name}")
 
-    # 重命名音频文件
     audio_path.rename(new_path)
-
-    # 重命名对应的文本文件
-    txt_path = audio_path.parent / f"{audio_path.stem}.txt"
-    if txt_path.exists():
-        new_txt_path = new_path.parent / f"{new_path.stem}.txt"
-        txt_path.rename(new_txt_path)
 
     return str(new_path.resolve())
 
 
 def move_audio_file(filepath: str, target_folder: str, output_dir: Path) -> str:
-    # 移动音频文件及其文本文件到目标文件夹，返回新路径
+    # 将音频文件移动到输出目录下的指定文件夹
     audio_path = Path(filepath)
     if not audio_path.exists():
         raise FileNotFoundError(f"文件不存在: {filepath}")
 
-    # 空字符串或 _root_ 表示移动到根目录
     if not target_folder or target_folder == "_root_":
         target_dir = output_dir
     else:
@@ -345,21 +343,14 @@ def move_audio_file(filepath: str, target_folder: str, output_dir: Path) -> str:
     if new_path.exists():
         raise FileExistsError(f"目标文件夹已存在同名文件: {audio_path.name}")
 
-    # 移动音频文件
     import shutil
     shutil.move(str(audio_path), str(new_path))
-
-    # 移动对应的文本文件
-    txt_path = audio_path.parent / f"{audio_path.stem}.txt"
-    if txt_path.exists():
-        new_txt_path = target_dir / f"{audio_path.stem}.txt"
-        shutil.move(str(txt_path), str(new_txt_path))
 
     return str(new_path.resolve())
 
 
 def list_folders(output_dir: Path) -> List[str]:
-    # 列出输出目录下所有子文件夹名称
+    # 获取输出目录下的所有子文件夹名称列表
     if not output_dir.exists():
         return []
     folders = [d.name for d in sorted(output_dir.iterdir()) if d.is_dir()]
@@ -367,18 +358,16 @@ def list_folders(output_dir: Path) -> List[str]:
 
 
 def list_source_files(input_dir: Path) -> List[dict]:
-    # 列出输入目录下的原始源文件（递归扫描子目录，按文件夹分组）
+    # 列出输入目录中所有支持的音视频文件（按文件夹分组）
     if not input_dir.exists():
         return []
 
-    # 支持音频和视频格式
     all_formats = ('.wav', '.mp3', '.flac', '.ogg', '.mp4', '.mkv', '.avi', '.webm', '.m4a')
     all_files = []
     for f in sorted(input_dir.rglob('*')):
         if f.is_file() and f.suffix.lower() in all_formats:
             try:
                 size_mb = round(f.stat().st_size / (1024 * 1024), 2)
-                # 相对于 input_dir 的路径
                 rel = f.relative_to(input_dir)
                 folder = str(rel.parent) if str(rel.parent) != '.' else ''
                 all_files.append({
@@ -391,7 +380,6 @@ def list_source_files(input_dir: Path) -> List[dict]:
             except Exception:
                 pass
 
-    # 按文件夹分组
     from collections import OrderedDict
     groups: OrderedDict[str, list] = OrderedDict()
     for item in all_files:
@@ -414,7 +402,7 @@ def list_source_files(input_dir: Path) -> List[dict]:
 
 
 def list_directory(path: str) -> dict:
-    # 浏览指定目录，返回子目录列表
+    # 浏览文件系统目录，列出子文件夹和驱动器
     import os
     p = Path(path) if path else Path.home()
     if not p.exists():
@@ -431,7 +419,6 @@ def list_directory(path: str) -> dict:
     except PermissionError:
         pass
 
-    # Windows 驱动器列表
     drives = []
     if os.name == 'nt':
         import string
@@ -449,18 +436,16 @@ def list_directory(path: str) -> dict:
 
 
 def split_audio_at_times(filepath: str, times: List[float]) -> List[str]:
-    # 按用户指定的时间点切分音频，纯按时间裁剪不使用 VAD
+    # 在指定时间点手动切分音频文件
     audio = read_audio(filepath)
     sr = 16000
     audio_path = Path(filepath)
     total_duration = len(audio) / sr
 
-    # 排序并去重时间点，过滤无效值
     times = sorted(set(t for t in times if 0 < t < total_duration))
     if not times:
         raise ValueError("没有有效的切分时间点")
 
-    # 构建区间: [0, t1], [t1, t2], ..., [tn, end]
     boundaries = [0.0] + times + [total_duration]
 
     output_dir = audio_path.parent
@@ -479,3 +464,69 @@ def split_audio_at_times(filepath: str, times: List[float]) -> List[str]:
         output_files.append(str(output_path))
 
     return output_files
+
+
+# 视频/音频转 WAV
+VIDEO_EXTS = {'.mp4', '.mkv', '.avi', '.webm', '.m4a', '.flac', '.ogg', '.mp3', '.wav'}
+
+
+def convert_audio(filepath: str, output_format: str = "wav", output_dir: Optional[Path] = None) -> str:
+    """
+    将视频或音频文件转换为指定格式（wav/mp3/flac/ogg/aac/m4a）。
+    使用 ffmpeg 直接转换（不依赖 pydub / ffprobe）。
+    """
+    SUPPORTED_FORMATS = {"wav", "mp3", "flac", "ogg", "aac", "m4a"}
+    fmt = output_format.lower()
+    if fmt not in SUPPORTED_FORMATS:
+        raise ValueError(f"不支持的格式: {output_format}，支持的格式: {', '.join(sorted(SUPPORTED_FORMATS))}")
+
+    src_path = Path(filepath)
+    if not src_path.exists():
+        raise FileNotFoundError(f"文件不存在: {filepath}")
+
+    ext = src_path.suffix.lower()
+    if ext == f'.{fmt}':
+        return str(src_path)
+
+    if output_dir is None:
+        output_dir = src_path.parent
+    else:
+        output_dir = Path(output_dir)
+        output_dir.mkdir(parents=True, exist_ok=True)
+
+    out_path = output_dir / f"{src_path.stem}.{fmt}"
+
+    # 定位 imageio_ffmpeg 自带的 ffmpeg 可执行文件
+    try:
+        import imageio_ffmpeg
+        ffmpeg_exe = imageio_ffmpeg.get_ffmpeg_exe()
+    except Exception:
+        raise RuntimeError("未找到 ffmpeg，请安装 ffmpeg 或安装 imageio-ffmpeg 包")
+
+    # ffmpeg 参数构建
+    cmd = [ffmpeg_exe, "-i", str(src_path), "-y"]
+
+    if fmt == "wav":
+        cmd.extend(["-ar", "16000", "-ac", "1"])
+    elif fmt == "mp3":
+        cmd.extend(["-b:a", "192k"])
+    elif fmt == "aac":
+        cmd.extend(["-b:a", "192k", "-f", "adts"])
+    elif fmt == "m4a":
+        cmd.extend(["-b:a", "192k", "-c:a", "aac"])
+
+    cmd.append(str(out_path))
+
+    logger.info(f"正在转换: {src_path.name} -> {out_path.name}")
+    result = subprocess.run(cmd, capture_output=True, text=True)
+    if result.returncode != 0:
+        logger.error(f"ffmpeg 转换失败: {result.stderr}")
+        raise RuntimeError(f"ffmpeg 转换失败: {result.stderr[:500]}")
+
+    logger.info(f"转换完成: {out_path}")
+    return str(out_path)
+
+
+def convert_to_wav(filepath: str, output_dir: Optional[Path] = None) -> str:
+    """兼容旧接口，内部调用 convert_audio。"""
+    return convert_audio(filepath, "wav", output_dir)
